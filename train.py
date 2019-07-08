@@ -17,6 +17,7 @@ import warnings
 # select gpu devices
 os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
 
+
 # tensorflow app flags
 FLAGS = tf.app.flags.FLAGS
 
@@ -24,14 +25,10 @@ FLAGS = tf.app.flags.FLAGS
 Commands to run:
 
 from personal computer:
-python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/Volumes/MGAPRES/IWOAI/data' 
---epochs 1 --log_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'
---model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
+python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/Volumes/MGAPRES/IWOAI/data' --epochs 1 --log_direct '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
 
 from imperial computer:
-python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' 
---epochs 1 --log_dir '/home/rbk/Desktop/storing/NAME/log' --checkpoint_dir '/home/rbk/Desktop/storing/NAME/ckpt'
---model_dir '/home/rbk/Desktop/storing/NAME/model'
+python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' --epochs 1 --log_direct '/home/rbk/Documents/storing/NAME/log' --checkpoint_dir '/home/rbk/Documents/storing/NAME/ckpt' --model_dir '/home/rbk/Documents/storing/NAME/model'
 """
 tf.app.flags.DEFINE_string('seg_type', 'UNET',
     """ 'UNET' or 'VNET'""")
@@ -57,7 +54,7 @@ tf.app.flags.DEFINE_integer('patch_size',384,
     """Size (pixels) of a data patch""")
 tf.app.flags.DEFINE_integer('epochs',1,
     """Number of epochs for training""")
-tf.app.flags.DEFINE_string('log_dir', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/log',
+tf.app.flags.DEFINE_string('log_direct', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/log',
     """Directory where to write training and testing event logs """)
 tf.app.flags.DEFINE_float('init_learning_rate',1e-2,
     """Initial learning rate""")
@@ -451,8 +448,8 @@ def train():
             print("{}: Start training...".format(datetime.datetime.now()))
 
             # summary writer for tensorboard
-            train_summary_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
-            valid_summary_writer = tf.summary.FileWriter(FLAGS.log_dir + '/valid', sess.graph)
+            train_summary_writer = tf.summary.FileWriter(FLAGS.log_direct + '/train', sess.graph)
+            valid_summary_writer = tf.summary.FileWriter(FLAGS.log_direct + '/valid', sess.graph)
 
             # restore from checkpoint
             if FLAGS.restore_training:
@@ -523,19 +520,19 @@ def train():
 def main(argv=None):
     if not FLAGS.restore_training:
         # clear log directory
-        if tf.gfile.Exists(FLAGS.log_dir):
-            tf.gfile.DeleteRecursively(FLAGS.log_dir)
-        tf.gfile.MakeDirs(FLAGS.log_dir)
+        if tf.gfile.Exists(FLAGS.log_direct):
+            tf.gfile.DeleteRecursively(FLAGS.log_direct)
+        tf.gfile.MakeDirs(FLAGS.log_direct)
 
         # clear checkpoint directory
         if tf.gfile.Exists(FLAGS.checkpoint_dir):
             tf.gfile.DeleteRecursively(FLAGS.checkpoint_dir)
         tf.gfile.MakeDirs(FLAGS.checkpoint_dir)
 
-        # # clear model directory
-        # if tf.gfile.Exists(FLAGS.model_dir):
-        #     tf.gfile.DeleteRecursively(FLGAS.model_dir)
-        # tf.gfile.MakeDirs(FLAGS.model_dir)
+        # clear model directory
+        if tf.gfile.Exists(FLAGS.model_dir):
+             tf.gfile.DeleteRecursively(FLGAS.model_dir)
+        tf.gfile.MakeDirs(FLAGS.model_dir)
 
     train()
 
