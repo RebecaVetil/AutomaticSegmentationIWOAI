@@ -20,7 +20,19 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
 # tensorflow app flags
 FLAGS = tf.app.flags.FLAGS
 
+"""
+Commands to run:
 
+from personal computer:
+python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/Volumes/MGAPRES/IWOAI/data' 
+--epochs 1 --log_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'
+--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
+
+from imperial computer:
+python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' 
+--epochs 1 --log_dir '/home/rbk/Desktop/storing/NAME/log' --checkpoint_dir '/home/rbk/Desktop/storing/NAME/ckpt'
+--model_dir '/home/rbk/Desktop/storing/NAME/model'
+"""
 tf.app.flags.DEFINE_string('seg_type', 'UNET',
     """ 'UNET' or 'VNET'""")
 tf.app.flags.DEFINE_string('data_dim', '2D',
