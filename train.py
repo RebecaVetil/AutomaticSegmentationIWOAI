@@ -445,6 +445,7 @@ def train():
         with tf.Session(config=config) as sess:
             # Initialize all variables
             sess.run(tf.global_variables_initializer())
+            print (os.environ['CONDA_DEFAULT_ENV'])
             print("{}: Start training...".format(datetime.datetime.now()))
 
             # summary writer for tensorboard
@@ -531,7 +532,7 @@ def main(argv=None):
 
         # clear model directory
         if tf.gfile.Exists(FLAGS.model_dir):
-             tf.gfile.DeleteRecursively(FLGAS.model_dir)
+             tf.gfile.DeleteRecursively(FLAGS.model_dir)
         tf.gfile.MakeDirs(FLAGS.model_dir)
 
     train()
