@@ -54,8 +54,10 @@ tf.app.flags.DEFINE_integer('num_classes',7,
     """Number of classes of the segmentation""") #6 biological masks (channels 1,2,3,4,5,6) and a background mask (channel 0)
 tf.app.flags.DEFINE_integer('batch_size',1,
     """Size of batch""")               
-tf.app.flags.DEFINE_integer('patch_size',384,
-    """Size (pixels) of a data patch""")
+tf.app.flags.DEFINE_integer('patch_size',300,
+    """Size (pixels) of a data patch. Here, 300 because we are cropping the image.""")
+tf.app.flags.DEFINE_bool('transformation', False,
+    """Wheter or not to apply the transformations""")
 tf.app.flags.DEFINE_integer('epochs',1,
     """Number of epochs for training""")
 tf.app.flags.DEFINE_string('log_direct', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/log',
@@ -246,12 +248,13 @@ def train():
                 directory=train_data_dir,
                 img_filename=FLAGS.image_filename,
                 seg_filename=FLAGS.seg_filename,
-                transforms=None,
+                transforms=FLAGS.transformation,
                 train=True,
                 num_classes = FLAGS.num_classes,
                 version = FLAGS.version,
                 selection = FLAGS.case_select,
-                selection_range = FLAGS.case_range
+                selection_range = FLAGS.case_range,
+                patch_size = FLAGS.patch_size
                 )
             trainDataset = TrainDataset.create_dataset()
             #print('The training dataset has {} training examples obtained from {} versions'.format(trainDataset.nb_samples, FLAGS.version))
@@ -267,12 +270,13 @@ def train():
                 directory=valid_data_dir,
                 img_filename=FLAGS.image_filename,
                 seg_filename=FLAGS.seg_filename,
-                transforms=None,
+                transforms=FLAGS.transformation,
                 train=False,
                 num_classes = FLAGS.num_classes,
                 version = FLAGS.version,
                 selection = 'all',
-                selection_range = (1,15)
+                selection_range = (1,15),
+                patch_size = FLAGS.patch_size
             )
             validDataset = ValidDataset.create_dataset()
             # print('The valid dataset has {} training examples obtained from {} versions'.format(validDataset.nb_samples,FLAGS.version))
@@ -469,7 +473,6 @@ def train():
         with tf.Session(config=config) as sess:
             # Initialize all variables
             sess.run(tf.global_variables_initializer())
-            print (os.environ['CONDA_DEFAULT_ENV'])
             print("{}: Start training...".format(datetime.datetime.now()))
 
             # summary writer for tensorboard
@@ -486,7 +489,6 @@ def train():
             
             print("{}: Last checkpoint epoch: {}".format(datetime.datetime.now(),start_epoch.eval()[0]))
             print("{}: Last checkpoint global step: {}".format(datetime.datetime.now(),tf.train.global_step(sess, global_step)))
-
             # loop over epochs
             for epoch in np.arange(start_epoch.eval(), FLAGS.epochs):
                 # initialize iterator in each new epoch
