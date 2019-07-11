@@ -2,6 +2,7 @@ import tensorflow as tf
 import os
 import numpy as np
 import math
+import random 
 
 
 
@@ -47,7 +48,9 @@ class OWAIDataset(object):
         transforms = None,
         train = False,
         num_classes = 7, 
-        version = 'both'):
+        version = 'both',
+        selection ='all',
+        selection_range = (1,61)):
         """ Class Constructor """
 
         # Initialise the variables of the instance
@@ -61,6 +64,8 @@ class OWAIDataset(object):
         self.begin_slices = begin_slices 
         self.end_slices = end_slices
         self.version = version
+        self.selection = selection
+        self.selection_range = selection_range
 
     def create_dataset(self):
         """ Create the TensorFlow dataset associated with the OWAIDataset object"""
@@ -75,7 +80,31 @@ class OWAIDataset(object):
                 img_paths.append(os.path.join(self.directory,case,self.img_filename))
                 # one segmentation is stored as directory/trainORvalid/case/seg.npy
                 seg_paths.append(os.path.join(self.directory,case,self.seg_filename))
-        
+
+        # case01_V00 ends up at the end of the lists
+        # we manually put it at the first position
+        img_paths.insert(0,img_paths[-1])
+        del(img_paths[-1])
+
+        seg_paths.insert(0,seg_paths[-1])
+        del(seg_paths[-1])
+
+        # Selecting only some cases
+        if (self.selection == 'random'):
+            idx = random.sample(range(len(img_paths)), int(self.selection_range[0]))
+            img_paths = [img_paths[i] for i in idx]
+            seg_paths = [seg_paths[i] for i in idx]
+            
+        elif (self.selection == 'select'):
+            if (self.version =='both'):
+                idx = [i for i in range(2*int(self.selection_range[0])-2, 2*int(self.selection_range[1])-2)]
+            else :
+                idx = [i for i in range(int(self.selection_range[0]), int(self.selection_range[1]))]
+            img_paths = [img_paths[i] for i in idx]
+            seg_paths = [seg_paths[i] for i in idx]
+
+        # if self.selection == 'all', we keep all the cases
+
         dataset = tf.data.Dataset.from_tensor_slices((img_paths,seg_paths)) 
         dataset = dataset.map(lambda image_path, label_path: tuple(tf.py_func(read_np, [image_path, label_path], [tf.float32,tf.uint8])))
         no_slices = int(self.end_slices - self.begin_slices)

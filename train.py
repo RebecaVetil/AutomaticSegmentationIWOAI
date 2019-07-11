@@ -38,6 +38,10 @@ tf.app.flags.DEFINE_list("slices", '0,160',
     """Begining and end of slicing ('0,160' means selecting all the dataset)""") 
 tf.app.flags.DEFINE_string("version", 'both',
     """ Which timepoint data to use: 'V00', 'V01' or 'both'""")
+tf.app.flags.DEFINE_string("case_select", 'all',
+    """ Cases to select for the training: all (60 patients), random (select n random patients) or select (select patients within a slice)'""")
+tf.app.flags.DEFINE_list("case_range", '1,61',
+    """Begining and end of slicing for the case selection: if all, must be (1,61) / if random, must be (n,n), n int / if select, must be (n,m), n and m int""")    
 tf.app.flags.DEFINE_string('data_directory', '/Volumes/MGAPRES/IWOAI/data',
     """Directory of stored data.""")
 tf.app.flags.DEFINE_string('image_filename','img.npy',
@@ -179,7 +183,20 @@ def train():
             sys.exit("Invalid slicing parameters");
         if (FLAGS.seg_type == 'UNET' and FLAGS.data_dim =='3D'):
             sys.exit("Invalid parameters: UNET can only support 2D data");
+        
+        assert isinstance(FLAGS.case_range, list)
 
+        if ((FLAGS.case_select == 'all') and (FLAGS.case_range != ['1','61'])):
+            sys.exit("Invalid case selection");
+        elif ((FLAGS.case_select == 'random') and (int(FLAGS.case_range[0]) != int(FLAGS.case_range[1]))):
+            print(FLAGS.case_select)
+            print(FLAGS.case_range)
+            sys.exit("Invalid random case selection");
+        elif (FLAGS.case_select == 'select') :
+            if (int(FLAGS.case_range[0]) >= int(FLAGS.case_range[1])):
+                sys.exit("Invalid case selection");
+            if ((1 <= int(FLAGS.case_range[0]) <= 59) and (2 <= int(FLAGS.case_range[1]) <= 61)):
+                pass
 
         # Generate the shapes
         if (FLAGS.data_dim == '2D'):
@@ -232,9 +249,12 @@ def train():
                 transforms=None,
                 train=True,
                 num_classes = FLAGS.num_classes,
-                version = FLAGS.version
+                version = FLAGS.version,
+                selection = FLAGS.case_select,
+                selection_range = FLAGS.case_range
                 )
             trainDataset = TrainDataset.create_dataset()
+            #print('The training dataset has {} training examples obtained from {} versions'.format(trainDataset.nb_samples, FLAGS.version))
             trainDataset = trainDataset.shuffle(buffer_size=FLAGS.shuffle_buffer_size)
             trainDataset = trainDataset.batch(FLAGS.batch_size)
 
@@ -250,11 +270,15 @@ def train():
                 transforms=None,
                 train=False,
                 num_classes = FLAGS.num_classes,
-                version = FLAGS.version
+                version = FLAGS.version,
+                selection = 'all',
+                selection_range = (1,15)
             )
             validDataset = ValidDataset.create_dataset()
+            # print('The valid dataset has {} training examples obtained from {} versions'.format(validDataset.nb_samples,FLAGS.version))
             validDataset = validDataset.shuffle(buffer_size=FLAGS.shuffle_buffer_size)
             validDataset = validDataset.batch(FLAGS.batch_size)
+
 
         # create the iterators  
         
