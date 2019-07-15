@@ -13,10 +13,9 @@ from Layers import constant_initializer
 import sys
 import warnings
 
-
 # select gpu devices
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
-
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 # tensorflow app flags
 FLAGS = tf.app.flags.FLAGS
@@ -56,7 +55,7 @@ tf.app.flags.DEFINE_integer('batch_size',1,
     """Size of batch""")               
 tf.app.flags.DEFINE_integer('patch_size',300,
     """Size (pixels) of a data patch. Here, 300 because we are cropping the image.""")
-tf.app.flags.DEFINE_bool('transformation', False,
+tf.app.flags.DEFINE_bool('transformation', True,
     """Wheter or not to apply the transformations""")
 tf.app.flags.DEFINE_integer('epochs',1,
     """Number of epochs for training""")
@@ -94,6 +93,7 @@ tf.app.flags.DEFINE_string('optimizer','sgd',
     """Optimization method (sgd, adam, momentum, nesterov_momentum)""")
 tf.app.flags.DEFINE_float('momentum',0.5,
     """Momentum used in optimization""")
+
 
 def placeholder_inputs(input_batch_shape, output_batch_shape):
     """
@@ -178,7 +178,7 @@ def train():
         # Keep track of the number of batches seen so far
         global_step = tf.train.get_or_create_global_step() 
 
-        # Sanity check
+        # Sanity checks
         begin_slices = int(FLAGS.slices[0])
         end_slices = int(FLAGS.slices[1])
         if (end_slices - begin_slices < 0):
