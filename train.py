@@ -14,8 +14,8 @@ import sys
 import warnings
 
 # select gpu devices
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1" # cpu 0
+#os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 # tensorflow app flags
 FLAGS = tf.app.flags.FLAGS
@@ -28,6 +28,10 @@ python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'bo
 
 from imperial computer:
 python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' --epochs 1 --log_direct '/home/rbk/Documents/storing/NAME/log' --checkpoint_dir '/home/rbk/Documents/storing/NAME/ckpt' --model_dir '/home/rbk/Documents/storing/NAME/model'
+
+from pompeii:
+python train.py --data_directory ./../data --patch_size 384 --log_direct ./../trainings/log --checkpoint_dir ./../trainings/ckpt --model_dir ./../trainings/model
+
 """
 tf.app.flags.DEFINE_string('seg_type', 'UNET',
     """ 'UNET' or 'VNET'""")
@@ -465,7 +469,7 @@ def train():
         print("Setting up Saver...")
         saver = tf.train.Saver(keep_checkpoint_every_n_hours=5)
 
-        config = tf.ConfigProto()
+        config = tf.ConfigProto(allow_soft_placement = True) #here
         config.gpu_options.allow_growth = True
         # config.gpu_options.per_process_gpu_memory_fraction = 0.4
 
