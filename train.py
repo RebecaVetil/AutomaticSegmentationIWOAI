@@ -14,8 +14,8 @@ import sys
 import warnings
 
 # select gpu devices
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" # cpu 0
+#os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 # tensorflow app flags
 FLAGS = tf.app.flags.FLAGS
@@ -24,7 +24,7 @@ FLAGS = tf.app.flags.FLAGS
 Commands to run:
 
 from personal computer:
-python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/Volumes/MGAPRES/IWOAI/data' --epochs 1 --log_direct '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
+python3 train.py --seg_type 'UNET' --data_dim '2D' --slices '0,3' --case_select 'select' --case_range '1,1' --version 'V00' --data_directory '/Volumes/MGAPRES/IWOAI/OLD/data' --epochs 1 --log_direct '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
 
 from imperial computer:
 python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' --epochs 1 --log_direct '/home/rbk/Documents/storing/NAME/log' --checkpoint_dir '/home/rbk/Documents/storing/NAME/ckpt' --model_dir '/home/rbk/Documents/storing/NAME/model'
@@ -83,8 +83,8 @@ tf.app.flags.DEFINE_integer('min_pixel',500,
     """Minimum non-zero pixels in the cropped segmentation""")
 tf.app.flags.DEFINE_integer('shuffle_buffer_size',1,
     """Number of elements used in shuffle buffer""")
-tf.app.flags.DEFINE_string('loss_function','weight_xent',
-    """Loss function used in optimization (xent, weight_xent, sorensen, jaccard, focal)""")
+tf.app.flags.DEFINE_string('loss_function','weighted_combined',
+    """Loss function used in optimization (xent, weight_xent, sorensen, jaccard, focal, combined, weighted_combined)""")
 tf.app.flags.DEFINE_float('background_weight',0.1,
     """Background weight when computing the weighted cross entropy""")    
 tf.app.flags.DEFINE_integer('gamma',2,
@@ -421,6 +421,17 @@ def train():
         log_sorensen_loss = tf.summary.scalar('sorensen_loss', sorensen_loss)
         log_jaccard_loss = tf.summary.scalar('jaccard_loss',jaccard_loss)
 
+        # Combined loss (inspired from the nn-UNET)
+        with tf.name_scope("combined_loss"):
+            combined_loss = sorensen_loss/FLAGS.num_classes  + xent
+        log_combined_loss = tf.summary.scalar('combined_loss', combined_loss)
+
+        # Weighted-combined loss (inspired from the nn-UNET)
+        with tf.name_scope("weighted_combined_loss"):
+            weighted_combined_loss = sorensen_loss/FLAGS.num_classes + weighted_loss_op
+        log_weighted_combined_loss = tf.summary.scalar('weighted_combined_loss', weighted_combined_loss)
+
+
         # Training Op
         with tf.name_scope("training"):
             # optimizer
@@ -446,6 +457,10 @@ def train():
                 loss_fn = jaccard_loss
             elif(FLAGS.loss_function == "focal"):
                 loss_fn = focal_loss
+            elif(FLAGS.loss_function == "combined"):
+                loss_fn = combined_loss
+            elif(FLAGS.loss_function == "weighted_combined"):
+                loss_fn = weighted_combined_loss
             else:
                 sys.exit("Invalid loss function");
 
@@ -459,7 +474,7 @@ def train():
 
         # saver
         summary_op_all = tf.summary.merge_all()
-        summary_op_scalar = tf.summary.merge([log_sorensen, log_jaccard, log_sorensen_loss, log_jaccard_loss, log_accuracy, log_cross_entropy, log_weighted_cross_entropy, log_focal_loss])
+        summary_op_scalar = tf.summary.merge([log_sorensen, log_jaccard, log_sorensen_loss, log_jaccard_loss, log_accuracy, log_cross_entropy, log_weighted_cross_entropy, log_focal_loss, log_combined_loss, log_weighted_combined_loss])
 
         checkpoint_prefix = os.path.join(FLAGS.checkpoint_dir ,"checkpoint")
         print("Setting up Saver...")
