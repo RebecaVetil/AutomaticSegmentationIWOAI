@@ -24,7 +24,7 @@ FLAGS = tf.app.flags.FLAGS
 Commands to run:
 
 from personal computer:
-python3 train.py --seg_type 'UNET' --data_dim '2D' --slices '0,3' --case_select 'select' --case_range '1,1' --version 'V00' --data_directory '/Volumes/MGAPRES/IWOAI/OLD/data' --epochs 1 --log_direct '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
+python3 train.py --seg_type 'UNET' --data_dim '2D' --transformation 'False' --patch_size 300 --slices '0,2' --case_select 'select' --case_range '1,2' --version 'V00' --data_directory '/Volumes/MGAPRES/IWOAI/OLD/data' --epochs 1 --log_direct '/Volumes/MGAPRES/IWOAI/storing/NAME/log' --checkpoint_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/ckpt'--model_dir '/Volumes/MGAPRES/IWOAI/storing/NAME/model'
 
 from imperial computer:
 python train.py --seg_type 'UNET' --data_dim '2D' --slices '0,160' --version 'both' --data_directory '/home/rbk/Desktop/IWOAIdata' --epochs 1 --log_direct '/home/rbk/Documents/storing/NAME/log' --checkpoint_dir '/home/rbk/Documents/storing/NAME/ckpt' --model_dir '/home/rbk/Documents/storing/NAME/model'
@@ -59,8 +59,8 @@ tf.app.flags.DEFINE_integer('batch_size',1,
     """Size of batch""")               
 tf.app.flags.DEFINE_integer('patch_size',300,
     """Size (pixels) of a data patch. Here, 300 because we are cropping the image.""")
-tf.app.flags.DEFINE_bool('transformation', True,
-    """Wheter or not to apply the transformations""")
+tf.app.flags.DEFINE_string('transformation', 'True',
+    """Wheter ('True') or not ('False') to apply the transformations""")
 tf.app.flags.DEFINE_integer('epochs',1,
     """Number of epochs for training""")
 tf.app.flags.DEFINE_string('log_direct', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/log',
@@ -189,6 +189,8 @@ def train():
             sys.exit("Invalid slicing parameters");
         if (FLAGS.seg_type == 'UNET' and FLAGS.data_dim =='3D'):
             sys.exit("Invalid parameters: UNET can only support 2D data");
+        if (FLAGS.transformation == 'False') and (FLAGS.patch_size != 384):
+            sys.exit("Invalid parameters: no transformation but cropped patch_size");
         
         assert isinstance(FLAGS.case_range, list)
 
@@ -306,7 +308,7 @@ def train():
                 model = SegNet.UNet(
                     num_classes=FLAGS.num_classes, 
                     keep_prob=1.0, # default 1
-                    num_channels=16, # default 16 
+                    num_channels=64, # default 64
                     num_levels=4,  # default 4
                     num_convolutions=(1,2,3,3), # default (1,2,3,3), size should equal to num_levels
                     bottom_convolutions=3, # default 3
@@ -320,6 +322,8 @@ def train():
                     num_convolutions=(1,2,3,3), # default (1,2,3,3), size should equal to num_levels
                     bottom_convolutions=3, # default 3
                     activation_fn="prelu") # default parametric relu
+            elif (FLAGS.seg_type == 'cascade'):
+                model = SegNet.Cascase()
             else:
                 sys.exit("Invalid Segmentation Net type (choose between UNET or VNET)");
             

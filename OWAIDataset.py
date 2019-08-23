@@ -4,10 +4,10 @@ import os
 import numpy as np
 import math
 import random 
+from scipy import ndimage
 
-def read_np(image_path, segm_path):
+def read_np(image_path, segm_path, n_classes):
     """ Loads and returns the image and the segmentation """
-    n_classes = 7
     img = np.load(image_path.decode())  #384 384 160 1
     seg = np.load(segm_path.decode()) #384 384 160 6
 
@@ -70,6 +70,109 @@ def split_tf(image, segm,no_slices):
     segs = tf.squeeze(segs)
     return imgs, segs
 
+def downsample(img, seg, times):
+    ## DOWNSAMPLING
+    kernel_img = np.array([[0.25,0.25],[0.25,0.25]])
+    kernel_img = kernel_img[:,:,np.newaxis,np.newaxis]
+
+    kernel_seg = np.array([[0.5,0.5],[0.5,0.5]])
+    kernel_seg = kernel_seg[:,:,np.newaxis,np.newaxis]
+
+    img_downsampled = img
+    seg_downsampled = seg
+
+    for k in range(0,times): 
+        img_downsampled = ndimage.convolve(img_downsampled, kernel_img)[:img_downsampled.shape[0]:2,:img_downsampled.shape[1]:2,:]
+        seg_downsampled = ndimage.convolve(seg_downsampled, kernel_seg)[:seg_downsampled.shape[0]:2,:seg_downsampled.shape[1]:2,:]
+
+
+    return img_downsampled, seg_downsampled
+
+def downsample_tf(img, seg):
+    # shapes : img  H W D 1 and seg  H W D 7
+    # to use tf.image.resize_images function, 
+    # we need to work on these shapes.
+    new_size = 75
+    num_classes = 7
+    # Pre-pocessing
+    img = tf.expand_dims(img, axis = 0, name = "add_batch_size_img") # 1 H W D 1
+    img = tf.squeeze(img, axis = -1, name = "squeeze_chanels_img") # 1 H W D
+    seg = tf.argmax(seg, axis = 3, name = 'squeeze_channels_seg') # H W D
+    seg = tf.expand_dims(seg, axis = 0,name= "add_batch_size_seg") # 1 H W D
+
+    # Method 3 (Area) for Images
+    img_downsampled = tf.image.resize_images(img, [new_size,new_size], method = 3)
+    # Method 1 (Nearest Neighbours) for Seg
+    seg_downsampled = tf.image.resize_images(seg, [new_size,new_size], method = 1)
+
+    # Post-processing
+    img_downsampled = tf.squeeze(img_downsampled, axis = 0, name = "squeeze_batch_size_img") # H W D
+    img_downsampled = tf.expand_dims(img_downsampled, axis = -1, name = "add_chanels_img") # H W D 1
+
+    seg_downsampled = tf.squeeze(seg_downsampled, axis = 0, name = "squeeze_batch_size_seg") # H W D
+    seg_downsampled = tf.one_hot(seg_downsampled, depth = num_classes, axis = -1, name = "add_chanels_seg") # H W D 7
+
+    return img_downsampled, seg_downsampled
+
+def upsample(img, seg, times):
+    factor = pow(2,times)
+
+    ## UPSAMPLING
+    img_upsampled = ndimage.zoom(img, [factor,factor,1,1], order=1)
+    seg_upsampled = ndimage.zoom(seg, [factor,factor,1,1], order=0)
+    
+    return img_upsampled, seg_upsampled
+
+def upsample_tf(img, seg, original_size, num_classes):
+    # Pre-pocessing
+    img = tf.expand_dims(img, axis = 0, name = "add_batch_size_img") # 1 H W D 1
+    img = tf.squeeze(img, axis = -1, name = "squeeze_chanels_img") # 1 H W D
+
+    seg = tf.argmax(seg, axis = 3, name = 'squeeze_channels_seg') # H W D
+    seg = tf.expand_dims(seg, axis = 0,name= "add_batch_size_seg") # 1 H W D
+
+    # Method 3 (Area) for Images
+    img_upsampled = tf.image.resize_images(img, [original_size,original_size], method = 3,align_corners=False, name = "up_img_ar")
+    # Method 1 (Nearest Neighbours) for Seg
+    seg_upsampled = tf.image.resize_images(seg, [original_size,original_size], method = 1, align_corners=False, name = "up_seg_nn")
+    
+    # Post-processing
+    img_upsampled = tf.squeeze(img_upsampled, axis = 0, name = "squeeze_batch_size_img") # H W D
+    img_upsampled = tf.expand_dims(img_upsampled, axis = -1, name = "add_chanels_img") # H W D 1
+
+    seg_upsampled = tf.squeeze(seg_upsampled, axis = 0, name = "squeeze_batch_size_seg") # H W D
+    seg_upsampled = tf.one_hot(seg_upsampled, depth = num_classes, axis = -1, name = "add_chanels_seg") # H W D 7
+
+    return img_upsampled, seg_upsampled
+
+def patch(img, seg, size, num_slices, num_classes):
+    # IMG
+    img = tf.expand_dims(img, axis = 0, name = "add_batch_size")
+    img = tf.squeeze(img, axis = -1, name = "squeeze")
+    img_patched = tf.image.extract_image_patches(images = img,
+                                            ksizes=[1]+ [size, size] +[1],
+                                            strides=[1]+ [size/2, size/2] +[1],
+                                            rates = [1, 1, 1, 1],
+                                            padding = "VALID",
+                                            name = "patching_image")
+    n = tf.shape(img_patched)[1]
+    img_patched = tf.reshape(img_patched, [n*n,size,size, num_slices], name = "reshaping")
+    img_patched = tf.expand_dims(img_patched, axis = -1, name = "add_channel_axis")
+
+    # SEG
+    seg = tf.argmax(seg, axis = 3, name = 'one_hot_encoding')
+    seg = tf.expand_dims(seg, axis = 0,name= "expand_dim")
+    seg_patched = tf.image.extract_image_patches(images = seg,
+                                            ksizes=[1]+ [size, size] +[1],
+                                            strides=[1]+ [size/2, size/2] +[1],
+                                            rates = [1, 1, 1, 1],
+                                            padding = "VALID",
+                                            name = "patching_image")
+    seg_patched = tf.reshape(seg_patched, [n*n,size,size,num_slices], name = "reshaping")
+    seg_patched = tf.one_hot(seg_patched,depth = num_classes, axis = -1, name = "one_hot_encoding")
+    
+    return img_patched, seg_patched
+
 
 class OWAIDataset(object):
     """
@@ -83,13 +186,15 @@ class OWAIDataset(object):
         directory = '/Volumes/MGAPRES/IWOAI/data/valid',
         img_filename = 'img.npy',
         seg_filename = 'seg.npy',
-        transforms = False,
+        transforms = 'False',
         train = False,
         num_classes = 7, 
         version = 'both',
         selection ='all',
         selection_range = (1,61),
-        patch_size =384):
+        image_size =384,
+        patch_size = 100,
+        down_factor = 2):
         """ Class Constructor """
 
         # Initialise the variables of the instance
@@ -105,7 +210,9 @@ class OWAIDataset(object):
         self.version = version
         self.selection = selection
         self.selection_range = selection_range
+        self.image_size = image_size
         self.patch_size = patch_size
+        self.down_factor = down_factor
 
     def create_dataset(self):
         """ Create the TensorFlow dataset associated with the OWAIDataset object"""
@@ -146,14 +253,16 @@ class OWAIDataset(object):
         # if self.selection == 'all', we keep all the cases
 
         dataset = tf.data.Dataset.from_tensor_slices((img_paths,seg_paths)) 
-        dataset = dataset.map(lambda image_path, label_path: tuple(tf.py_func(read_np, [image_path, label_path], [tf.float32,tf.uint8])))
-        if (self.transforms == True):
-            dataset = dataset.map(lambda img, label: tuple(tf.py_func(transformations, [img, label, self.patch_size], [tf.float32,tf.uint8])))
+        dataset = dataset.map(lambda image_path, label_path: tuple(tf.py_func(read_np, [image_path, label_path, self.num_classes], [tf.float32,tf.uint8])))
+        if (self.transforms == 'True'):
+            dataset = dataset.map(lambda img, label: tuple(tf.py_func(transformations, [img, label, self.image_size], [tf.float32,tf.uint8])))
 
         no_slices = int(self.end_slices - self.begin_slices)
+        
         if not (self.begin_slices ==0 and self.end_slices ==160):
             # we slice the tensor so as we get only the selected slices
             dataset = dataset.map(lambda img_3D, seg_3D : slice_tf(img_3D, seg_3D,self.begin_slices, self.end_slices))
+
         if (self.type == '2D'):
             # we unbatch the data in order to get a 2D dataset
             dataset = dataset.map(lambda img_3D, seg_3D : split_tf(img_3D, seg_3D, no_slices))
@@ -164,6 +273,24 @@ class OWAIDataset(object):
 
         return self.dataset
 
+    def downsample_dataset(self):
+        new_size = int(self.image_size/pow(2,self.down_factor))
+        num_classes = self.num_classes
+        self.dataset = self.dataset.map(lambda img, label: tuple(tf.py_func(downsample, [img, label, self.down_factor], [tf.float32,tf.uint8])))
+        #self.dataset = self.dataset.map(downsample_tf)
+        return self.dataset
+    
+    def upsample_dataset(self):
+        #self.dataset = self. dataset.map(lambda img, label: tuple(tf.py_func(upsample, [img, label, self.down_factor], [tf.float32,tf.uint8])))
+        self.dataset = self.dataset.map(lambda img, label: upsample_tf(img, label, self.image_size, self.num_classes))
+        return self.dataset
+    
+    def patch_dataset(self):
+        size = self.patch_size
+        num_slices = int(self.end_slices - self.begin_slices)
+        num_classes = self.num_classes
+        self.dataset = self.dataset.map(lambda img, label : patch(img, label, size, num_slices, num_classes))
+        return self.dataset
 
 #### TRANSFORMATIONS
 
@@ -202,8 +329,8 @@ class StatisticalNormalization(object):
         intensityWindowingFilter = sitk.IntensityWindowingImageFilter()
         intensityWindowingFilter.SetOutputMaximum(0.005)
         intensityWindowingFilter.SetOutputMinimum(0)
-        intensityWindowingFilter.SetWindowMaximum(statisticsFilter.GetMean()+self.sigma*statisticsFilter.GetSigma());
-        intensityWindowingFilter.SetWindowMinimum(statisticsFilter.GetMean()-self.sigma*statisticsFilter.GetSigma());
+        intensityWindowingFilter.SetWindowMaximum(statisticsFilter.GetMean()+self.sigma*statisticsFilter.GetSigma())
+        intensityWindowingFilter.SetWindowMinimum(statisticsFilter.GetMean()-self.sigma*statisticsFilter.GetSigma())
 
         image = intensityWindowingFilter.Execute(image)
 
@@ -226,8 +353,8 @@ class ManualNormalization(object):
         intensityWindowingFilter = sitk.IntensityWindowingImageFilter()
         intensityWindowingFilter.SetOutputMaximum(255)
         intensityWindowingFilter.SetOutputMinimum(0)
-        intensityWindowingFilter.SetWindowMaximum(self.windowMax);
-        intensityWindowingFilter.SetWindowMinimum(self.windowMin);
+        intensityWindowingFilter.SetWindowMaximum(self.windowMax)
+        intensityWindowingFilter.SetWindowMinimum(self.windowMin)
 
         image = intensityWindowingFilter.Execute(image)
 

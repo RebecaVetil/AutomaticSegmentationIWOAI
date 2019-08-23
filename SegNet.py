@@ -86,7 +86,7 @@ def decompression_block_v(layer_input, fine_grained_features, num_conv_layer, ke
             x = convolution(x, spatial_size * [5] + [n_channels * 2, n_channels]) 
             x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training) 
             # Normalise the input layer, add it to the last convolution result, normalise again
-            layer_input = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
+            layer_input = tf.layers.batch_normalization(layer_input, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
             x = x + layer_input
             x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
             x = activation_fn(x)
@@ -110,7 +110,7 @@ def decompression_block_v(layer_input, fine_grained_features, num_conv_layer, ke
             x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
             if i == num_conv_layer - 1: 
                 # at the end of the last convolution layer: residual learning
-                layer_input = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
+                layer_input = tf.layers.batch_normalization(layer_input, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
                 x = x + layer_input 
                 x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=is_training)
             x = activation_fn(x)
@@ -284,7 +284,7 @@ class VNet(object):
                 x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=self.is_training)
 
             else: 
-                # other type of images (RGB)
+                # other type of images or patch stage of the cascaded VNET
                 x = convolution(x, [5] * spatial_size + [input_channels, self.num_channels])
                 x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=self.is_training)
                 x = self.activation_fn(x)
@@ -381,6 +381,136 @@ class UNet(object):
         spatial_size = get_spatial_rank(x) 
         features = list()
 
+
+        # Left path - compression
+        for l in range(0,self.num_levels): 
+            with tf.variable_scope('unet/encoder/level_' + str(l+1)):
+                with tf.variable_scope('double_n_channels'):
+                    print('Level ', l, 'input shape:', x.get_shape())#here
+                    print(self.num_channels)
+                    print('Now, increase filters to:', pow(2,l)*self.num_channels)
+                    x = conv_increase_filters_u(x, pow(2,l)*self.num_channels, keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+
+                with tf.variable_scope('convolutions'):
+                    print('Level ', l, 'before compression block shape:', x.get_shape())#here
+                    x = compression_block_u(x, self.num_convolutions[l], keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+                
+                with tf.variable_scope('feature_storing'):
+                    # Store the tensor as fine-grained features for the right path
+                    features.append(x)
+
+                with tf.variable_scope('downsampling'): 
+                    print('Level ', l, 'before downsampling shape:', x.get_shape())#here
+                    x = downsampling_pooling_u(x, keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+
+        # Bottom level
+        with tf.variable_scope('unet/bottom_level'):
+            no_filters = pow(2,self.num_levels)*self.num_channels # 1024 in the original paper
+            print('Bottom -before first conv shape:', x.get_shape())#here
+            with tf.variable_scope('first_conv'):
+                x = conv_increase_filters_u(x, no_filters, keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+            print('Bottom -before second conv shape:', x.get_shape())#here
+            with tf.variable_scope('second_conv'):
+                x = conv_increase_filters_u(x, no_filters, keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+
+        # Right path - decompression
+        for l in reversed(range(self.num_levels)):
+            with tf.variable_scope('unet/decoder/level_' + str(l + 1)):
+                # Level l 
+                # Get the fine-grained features from the corresponding compressing level
+                f = features[l] 
+                # Start by up-convolution: 
+                with tf.variable_scope('upsampling'): 
+                    # We generate a tensor with the same shape as the fine-grained feature tensor
+                    print('Level ', l, 'before up conv shape:', x.get_shape())#here
+                    x = up_convolution(x, tf.shape(f), factor=2, kernel_size= [2]* spatial_size)
+                    x = tf.layers.batch_normalization(x, momentum=0.99, epsilon=0.001,center=True, scale=True,training=self.is_training)
+                    x = self.activation_fn(x)
+                # Decompression block 
+                with tf.variable_scope('convolutions'): 
+                    print('Level ', l, 'before decompression block shape:', x.get_shape())#here
+                    x = decompression_block_u(x, f, self.num_convolutions[l], keep_prob, activation_fn=self.activation_fn, is_training=self.is_training)
+
+        # Output processing 
+        with tf.variable_scope('unet/output_layer'):
+            # Compute the output features maps with a 1×1×1 kernel size 
+            # and produce the raw outputs 
+            print('Output processing before conv shape:', x.get_shape())#here
+            logits = convolution(x, [1] * spatial_size + [self.num_channels, self.num_classes])
+            logits = tf.layers.batch_normalization(logits, momentum=0.99, epsilon=0.001,center=True, scale=True,training=self.is_training)
+            print('Output processing final logits shape:', logits.get_shape())#here
+        return logits
+
+class cascade(object):
+    def __init__(self,
+                 num_classes =7,
+                 keep_prob=1.0,
+                 num_channels=64,
+                 num_levels=4,
+                 num_convolutions=(2,2,2,2),
+                 bottom_convolutions=2,
+                 is_training = True,
+                 activation_fn="relu"):
+        """
+        Implements UNet architecture https://arxiv.org/pdf/1505.04597.pdf
+        :param num_classes: Number of output classes.
+        :param keep_prob: Dropout keep probability, set to 1.0 if not training or if no dropout is desired.
+        :param num_channels: The number of output channels in the first level, this will be doubled every level. Default is 16 as in the paper.
+        :param num_levels: The number of levels in the network. Default is 4 as in the paper.
+        :param num_convolutions: An array with the number of convolutions at each level.
+        :param bottom_convolutions: The number of convolutions at the bottom level of the network.
+        :param activation_fn: The activation function.
+        """
+        self.num_classes = num_classes
+        self.keep_prob = keep_prob
+        self.num_channels = num_channels
+        assert num_levels == len(num_convolutions)
+        self.num_levels = num_levels
+        self.num_convolutions = num_convolutions
+        self.bottom_convolutions = bottom_convolutions
+        self.is_training = is_training
+
+        if (activation_fn == "relu"):
+            self.activation_fn = tf.nn.relu
+        elif(activation_fn == "prelu"):
+            self.activation_fn = prelu
+
+
+    #def first_stage(self, x):
+        # VNET on low resolution
+
+    #def second_stage(self, x):
+        
+        # Pass the input (I) through the first network to obtain a rough segmentation (I') 
+        # Break the input image (I) into small patches (i)
+        # Break the rough segmentation (I') into small patches (i')
+        # Train a VNET on all this patches (i) with the segmented patches (i') as additional input channel
+        #  
+
+    def network_fn(self, x):
+        """
+        This function passes x through the whole network
+        ---
+        :param: x: input tensor of shape [batch_size, input_spatial_shape, input_channels]
+        ---- 
+        :return: a tensor of shape [batch_size, input_spatial_shape, num_classes] 
+        """
+        # First VNET: low resolution
+        low_segmentation = self.first_stage(x)
+
+        # Second VNET: high resolution but on patches
+        x = self.second_stage(x)
+        keep_prob = self.keep_prob if self.is_training else 1.0
+
+        spatial_size = get_spatial_rank(x) 
+        features = list()
+
+        # Downsample the input image
+
+        # Train a VNET on that, obtain a segmentation
+
+        # 
+        # Upsample the result
 
         # Left path - compression
         for l in range(0,self.num_levels): 

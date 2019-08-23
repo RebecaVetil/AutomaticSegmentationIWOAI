@@ -125,7 +125,7 @@ def get_spatial_size(x):
 
 
 # parametric leaky relu
-def prelu(x):
+def prelu(x, trainable = True):
     """
     This function implements the parametric ReLU
     ---
@@ -133,11 +133,11 @@ def prelu(x):
     ---- 
     :return: the tensor after passing through the non-linearity
     """
-    alpha = tf.get_variable('alpha', shape=x.get_shape()[-1], dtype=x.dtype, initializer=tf.constant_initializer(0.1)) 
+    alpha = tf.get_variable('alpha', shape=x.get_shape()[-1], dtype=x.dtype, initializer=tf.constant_initializer(0.1), trainable= trainable) 
     return tf.maximum(0.0, x) + alpha * tf.minimum(0.0, x)
 
 
-def convolution(x, filter_shape, padding='SAME', strides=None, dilation_rate=None):
+def convolution(x, filter_shape, padding='SAME', strides=None, dilation_rate=None, trainable = True):
     """
     This function operates the convolution of two tensors
     ---
@@ -149,9 +149,9 @@ def convolution(x, filter_shape, padding='SAME', strides=None, dilation_rate=Non
     ---- 
     :return: the tensor that results from the convolution
     """
-    w = tf.get_variable(name='weights', initializer=xavier_initializer_convolution(shape=filter_shape))
-    b = tf.get_variable(name='biases', initializer=constant_initializer(0, shape=filter_shape[-1]))
-    
+
+    w = tf.get_variable(name='weights', initializer=xavier_initializer_convolution(shape=filter_shape), trainable= trainable)
+    b = tf.get_variable(name='biases', initializer=constant_initializer(0, shape=filter_shape[-1]), trainable=trainable)
     return tf.nn.convolution(x, w, padding, strides, dilation_rate) + b
 
 
