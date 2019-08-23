@@ -13,6 +13,20 @@ I implemented a UNET and a VNET.
 ## Description of the data
 ### Basic Description
 
+We are provided with:
+- a training dataset, made of 60 patients
+- a validation dataset, made of 14 patients
+
+
+- The shape of an image scan is: (384, 384, 160)
+- The type of an image scan is: float32
+- The shape of a segmentation scan is: (384, 384, 160, 6)
+- - The 4-th dimension of the segmentation scans corresponds to the 6 masks we have to produce: 'Femoral Cart', 'Medial Tibial Cart', 'Lateral Tibial Cart', 'Patellar Cart', 'Lateral Meniscus', and 'Medial Meniscus'.
+- The type of a segmentation scan is: uint8
+
+
+_____________________
+TODO 
 ### Challenges
 
 ## Learning Strategy
@@ -66,71 +80,6 @@ I implemented a UNET and a VNET.
 --optimizer sgd adam momentum nesterov_momentum
 --momentum 0.5
 
-
-tf.app.flags.DEFINE_string('seg_type', 'UNET',
-    """ 'UNET' or 'VNET'""")
-tf.app.flags.DEFINE_string('data_dim', '2D',
-    """If VNET, '2D' or '3D'""")
-tf.app.flags.DEFINE_list("slices", '0,160',
-    """Begining and end of slicing ('0,160' means selecting all the dataset)""") 
-tf.app.flags.DEFINE_string("version", 'both',
-    """ Which timepoint data to use: 'V00', 'V01' or 'both'""")
-tf.app.flags.DEFINE_string("case_select", 'all',
-    """ Cases to select for the training: all (60 patients), random (select n random patients) or select (select patients within a slice)'""")
-tf.app.flags.DEFINE_list("case_range", '1,61',
-    """Begining and end of slicing for the case selection: if all, must be (1,61) / if random, must be (n,n), n int / if select, must be (n,m), n and m int""")    
-tf.app.flags.DEFINE_string('data_directory', '/Volumes/MGAPRES/IWOAI/data',
-    """Directory of stored data.""")
-tf.app.flags.DEFINE_string('image_filename','img.npy',
-    """Image filename""")
-tf.app.flags.DEFINE_integer('input_channels',1,
-    """Number of channels of the input images: 1 (Grayscale), 3 (RGB)""")
-tf.app.flags.DEFINE_string('seg_filename','seg.npy',
-    """Segmentation filename""")
-tf.app.flags.DEFINE_integer('num_classes',7,
-    """Number of classes of the segmentation""") #6 biological masks (channels 1,2,3,4,5,6) and a background mask (channel 0)
-tf.app.flags.DEFINE_integer('batch_size',1,
-    """Size of batch""")               
-tf.app.flags.DEFINE_integer('patch_size',300,
-    """Size (pixels) of a data patch. Here, 300 because we are cropping the image.""")
-tf.app.flags.DEFINE_bool('transformation', False,
-    """Wheter or not to apply the transformations""")
-tf.app.flags.DEFINE_integer('epochs',1,
-    """Number of epochs for training""")
-tf.app.flags.DEFINE_string('log_direct', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/log',
-    """Directory where to write training and testing event logs """)
-tf.app.flags.DEFINE_float('init_learning_rate',1e-2,
-    """Initial learning rate""")
-tf.app.flags.DEFINE_float('decay_factor',0.01,
-    """Exponential decay learning rate factor""")
-tf.app.flags.DEFINE_integer('decay_steps',100,
-    """Number of epoch before applying one learning rate decay""")
-tf.app.flags.DEFINE_integer('display_step',10,
-    """Display and logging interval (train steps)""")
-tf.app.flags.DEFINE_integer('save_interval',1,
-    """Checkpoint save interval (epochs)""")
-tf.app.flags.DEFINE_string('checkpoint_dir', '/Volumes/MGAPRES/IWOAI/tmp_wxent01/ckpt',
-    """Directory where to write checkpoint""")
-tf.app.flags.DEFINE_string('model_dir','/Volumes/MGAPRES/IWOAI/tmp_wxent01/model',
-    """Directory to save model""")
-tf.app.flags.DEFINE_bool('restore_training',False,
-    """Restore training from last checkpoint""")
-tf.app.flags.DEFINE_float('drop_ratio',0,
-    """Probability to drop a cropped area if the segmentation is empty. All empty patches will be dropped for 0 and accept all cropped patches if set to 1""")
-tf.app.flags.DEFINE_integer('min_pixel',500,
-    """Minimum non-zero pixels in the cropped segmentation""")
-tf.app.flags.DEFINE_integer('shuffle_buffer_size',1,
-    """Number of elements used in shuffle buffer""")
-tf.app.flags.DEFINE_string('loss_function','weight_xent',
-    """Loss function used in optimization (xent, weight_xent, sorensen, jaccard, focal)""")
-tf.app.flags.DEFINE_float('background_weight',0.1,
-    """Background weight when computing the weighted cross entropy""")    
-tf.app.flags.DEFINE_integer('gamma',2,
-    """Gamma parameter used for the focal loss""")
-tf.app.flags.DEFINE_string('optimizer','sgd',
-    """Optimization method (sgd, adam, momentum, nesterov_momentum)""")
-tf.app.flags.DEFINE_float('momentum',0.5,
-    """Momentum used in optimization""")
 
 ## Credits:
 
